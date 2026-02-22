@@ -4,15 +4,15 @@ import { getFunctions } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
 
 // Your web app's Firebase configuration
-// This file should only export the configuration object.
-// The initialization happens in your main app file.
+// Configuration loaded from environment variables
+// See .env file (DO NOT COMMIT .env TO GIT)
 const firebaseConfig = {
-  apiKey: "AIzaSyD2B5ZIVbl2wB4U5UWkQwzx1TXYmzKbJqA",
-  authDomain: "nsbehacks-song-battle.firebaseapp.com",
-  projectId: "nsbehacks-song-battle",
-  storageBucket: "nsbehacks-song-battle.firebasestorage.app",
-  messagingSenderId: "69482332074",
-  appId: "1:69482332074:web:2ba5b5f86fed3950f1f5d3"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
