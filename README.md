@@ -1,8 +1,8 @@
-# 🎵 Song Battle - Gamified DJ Requests with XRP Payments
+# 🎵 Song Quest - Gamified DJ Requests with XRP Payments
 
 **NSBEHacks 2026 - Ripple XRP Challenge Submission**
 
-A decentralized, gamified jukebox where party-goers bid XRP on songs they want to hear next. Instead of chaotic song requests, the crowd engages in real-time "Song Battles" where the highest bidder wins.
+A decentralized, gamified jukebox where party-goers bid XRP on songs they want to hear next. Instead of chaotic song requests, the crowd engages in real-time "Song Quests" where the highest bidder wins.
 
 ## 🎯 The Problem
 
