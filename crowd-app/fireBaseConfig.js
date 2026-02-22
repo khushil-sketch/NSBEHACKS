@@ -21,4 +21,4 @@ const app = initializeApp(firebaseConfig);
 // Initialize and export the services to be used throughout the app
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = getFunctions(app);
+export const functions = getFunctions(app, 'us-central1'); // Specify region to match deployment

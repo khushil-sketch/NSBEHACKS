@@ -2,9 +2,43 @@
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const xrplService = require("./xrplService");
 
 // Initialize the Firebase Admin SDK
 admin.initializeApp();
+
+/**
+ * Get user's XRPL wallet from Firestore
+ * @param {string} userId - Firebase user ID
+ * @return {Promise<Object|null>} Wallet object or null if doesn't exist
+ */
+async function getUserWallet(userId) {
+  const db = admin.firestore();
+  const userWalletDoc = await db.collection("users").doc(userId).collection("data").doc("wallet").get();
+
+  if (userWalletDoc.exists) {
+    return userWalletDoc.data();
+  }
+  return null;
+}
+
+/**
+ * Save user's XRPL wallet to Firestore
+ * @param {string} userId - Firebase user ID
+ * @param {Object} wallet - Wallet object from xrplService
+ * @param {string} fundingTxHash - Transaction hash of initial funding
+ */
+async function saveUserWallet(userId, wallet, fundingTxHash) {
+  const db = admin.firestore();
+  await db.collection("users").doc(userId).collection("data").doc("wallet").set({
+    address: wallet.address,
+    seed: wallet.seed, // For hackathon only - production would use encryption/KMS
+    createdAt: wallet.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    fundingTxHash: fundingTxHash,
+    balance: 50, // Initial funded amount
+  });
+  console.log(`Saved wallet for user ${userId}: ${wallet.address}`);
+}
 
 /**
  * Handles a user's bid on a song in the current battle.
@@ -35,13 +69,76 @@ exports.placeBid = functions.https.onCall(async (data, context) => {
     );
   }
 
-  // For the hackathon, we will stub the XRPL payment check.
-  // In a real app, you would first verify a payment was received on the XRPL.
-  // Once you integrate the xrpl.js library, you will 
-  // replace that console.log with actual code to connect to the XRP Ledger
-  console.log(
-      `Received bid of ${bidAmount} from user ${userId} for ${songChoice}.`,
+  // ===== XRPL PAYMENT INTEGRATION =====
+  console.log(`Processing bid of ${bidAmount} XRP from user ${userId} for ${songChoice}`);
+
+  // Get or create user's XRPL wallet
+  let userWallet = await getUserWallet(userId);
+
+  if (!userWallet) {
+    console.log(`User ${userId} has no wallet. Creating and funding new wallet...`);
+
+    // Generate new wallet for this user
+    const newWallet = xrplService.generateWallet();
+
+    // Fund the wallet with 50 XRP from master wallet (reduced for testnet demo)
+    const fundingResult = await xrplService.fundWallet(newWallet.address, 50);
+
+    if (!fundingResult.success) {
+      throw new functions.https.HttpsError(
+          "internal",
+          `Failed to fund new wallet: ${fundingResult.error}`,
+      );
+    }
+
+    // Save wallet to Firestore
+    await saveUserWallet(userId, newWallet, fundingResult.txHash);
+
+    // Use newly created wallet
+    userWallet = newWallet;
+    console.log(`New wallet created and funded: ${newWallet.address} (tx: ${fundingResult.txHash})`);
+  }
+
+  // Get battle escrow wallet (where all bids go)
+  const escrowWallet = xrplService.getBattleEscrowWallet();
+  console.log(`Battle escrow wallet: ${escrowWallet.address}`);
+
+  // Send payment from user wallet to battle escrow
+  console.log(`Sending ${bidAmount} XRP from ${userWallet.address} to ${escrowWallet.address}`);
+
+  const paymentResult = await xrplService.sendPayment(
+      userWallet,
+      escrowWallet.address,
+      bidAmount,
+      {
+        battleId: "current_battle",
+        songChoice: songChoice,
+        userId: userId,
+      },
   );
+
+  // Verify payment succeeded
+  if (!paymentResult.success) {
+    throw new functions.https.HttpsError(
+        "internal",
+        `Payment failed: ${paymentResult.error}`,
+    );
+  }
+
+  console.log(`Payment successful! Transaction hash: ${paymentResult.txHash}`);
+
+  // Update user's cached balance
+  try {
+    const newBalance = await xrplService.getBalance(userWallet.address);
+    const db = admin.firestore();
+    await db.collection("users").doc(userId).collection("data").doc("wallet").update({
+      balance: newBalance,
+    });
+  } catch (balanceError) {
+    console.warn("Failed to update cached balance:", balanceError);
+    // Non-critical error, continue with bid placement
+  }
+  // ===== END XRPL PAYMENT INTEGRATION =====
 
   // 2. Update Firestore using a Transaction
   const db = admin.firestore();
@@ -77,8 +174,14 @@ exports.placeBid = functions.https.onCall(async (data, context) => {
         },
       });
     });
-    return {success: true, message: "Bid placed successfully!"};
-    
+
+    // Return success with transaction details
+    return {
+      success: true,
+      message: "Bid placed successfully!",
+      txHash: paymentResult.txHash,
+      walletAddress: userWallet.address,
+    };
   } catch (error) {
     console.error("Transaction failed: ", error);
     // Re-throw HTTPS errors, or wrap other errors
